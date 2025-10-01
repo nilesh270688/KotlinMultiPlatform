@@ -1,0 +1,74 @@
+name: Deploy Compose Multiplatform Web to GitHub Pages
+
+on:
+  push:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+# Required for GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+env:
+  # Change this to your web module name if different
+  MODULE: composeApp
+  # Pick ONE:
+  #   wasmJsBrowserDistribution  -> for Compose/WASM (Kotlin/WASM)
+  #   jsBrowserDistribution      -> for Kotlin/JS target
+  BUILD_TASK: wasmJsBrowserDistribution
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Grant execute permission for Gradle wrapper
+        run: chmod +x ./gradlew
+
+      - name: Build (Compose Multiplatform Web)
+        run: |
+          ./gradlew :$MODULE:$BUILD_TASK --stacktrace
+          mkdir -p dist
+          if [ "$BUILD_TASK" = "wasmJsBrowserDistribution" ]; then
+            OUT="$MODULE/build/dist/wasmJs/productionExecutable"
+          else
+            OUT="$MODULE/build/distributions"
+          fi
+          cp -r "$OUT"/* dist/
+          # Ensure GitHub Pages doesn’t run Jekyll
+          touch dist/.nojekyll
+          # SPA fallback so deep links work on Pages
+          cp dist/index.html dist/404.html || true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
