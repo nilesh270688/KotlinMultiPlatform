@@ -1,6 +1,8 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.tasks.Sync
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -27,18 +29,12 @@ kotlin {
         }
     }
 
-    jvm(){}
-
-//    js {
-//        browser()
-//        binaries.executable()
-//    }
+    jvm {}
 
     js(IR) {
         browser()
         binaries.executable()
     }
-
 
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
@@ -114,4 +110,18 @@ compose.desktop {
             packageVersion = "1.0.0"
         }
     }
+}
+
+// ----------------------------
+// packForXcode Task
+// ----------------------------
+val packForXcode by tasks.registering(Sync::class) {
+    val mode = System.getenv("CONFIGURATION") ?: "DEBUG"
+    val targetName = System.getenv("SDK_NAME")?.takeIf { it.startsWith("iphoneos") }?.let { "iosArm64" } ?: "iosSimulatorArm64"
+    val framework = kotlin.targets.getByName<KotlinNativeTarget>(targetName).binaries.getFramework(mode)
+
+    from(framework.outputDirectory)
+    into(File(buildDir, "xcode-frameworks"))
+
+    dependsOn(framework.linkTaskProvider)
 }
